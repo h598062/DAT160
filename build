@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+prevloc=$(pwd)
+cd "$HOME/ros2_ws"
+
+colcon build --symlink-install
+
+source "$HOME/ros2_ws/install/setup.bash"
+
+cd $prevloc
