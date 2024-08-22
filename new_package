@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+
+# This script helps create a new package for ros2
+REPO_DIR="$(pwd)"
+TARGET_DIR="$HOME/ros2_ws/src"
+LINK=0
+
+usage() {
+  echo "Creates a new ros2 package in CWD or -r(--repo) directory"
+  echo "Usage: $0 package_name [-r, --repo <repo_dir>] [-t, --target <target_dir>] [-l, --link]"
+  echo "       $0 [-h, --help: Show this help]"
+  echo ""
+  echo "package_name: Must be alphanumeric and may only contain underscores"
+  echo ""
+  echo "Options:"
+  echo "  -r, --repo <repo_dir>       Specify the repo directory. Defaults to CWD"
+  echo "  -t, --target <target_dir>   Specify the target directory. Defaults to: ~/ros2_ws/src"
+  echo "  -l, --link                  Create symlink to target directory. See -t, --target"
+  echo "  -h, --help                  Show this help"
+  exit 0
+}
+
+if [[ "$#" -eq 0 ]]; then
+  echo "Error: The package name is required."
+  usage
+fi
+
+package_name=$1
+shift
+
+# Validate package name
+if [[ ! "$package_name" =~ ^[A-Za-z0-9_]+$ ]]; then
+  echo "Error: Package name must be alphanumeric, and can only contain underscores"
+  usage
+fi
+
+# Parse commandline options
+while [[ "$#" -gt 0 ]]; do
+  case "$1" in
+    -r|--repo)
+      REPO_DIR="$2"
+      shift 2
+      ;;
+    -t|--target)
+      TARGET_DIR="$2"
+      shift 2
+      ;;
+    -l|--link)
+      LINK=1
+      shift
+      ;;
+    -h|--help)
+      usage
+      ;;
+    --) # end of all options
+      shift
+      break
+      ;;
+    -?*) # unknown option
+      echo "Unknown option: $1"
+      usage
+      ;;
+    *) # no more options
+      break
+      ;;
+  esac
+done
+
+# Check if the REPO_DIR exists and is a directory
+if [ ! -d "$REPO_DIR" ]; then
+  echo "Error: $REPO_DIR is not a valid directoty."
+  exit 1
+fi
+
+# Check if the TARGET_DIR exists and is a directory
+if [ ! -d "$TARGET_DIR" ]; then
+  echo "Error: $TARGET_DIR is not a valid directoty."
+  exit 1
+fi
+
+# check for name collisions for the package name
+if [ -e "$REPO_DIR/$package_name" ]; then
+  echo "$package_name already exists, try again."
+  exit 1
+fi
+
+# cd to repo directory
+prevloc=$(pwd)
+cd "$REPO_DIR"
+
+# create the ros2 package
+ros2 pkg create --build-type ament_python --node-name "$package_name" "$package_name"
+
+# link the new package if -l or --link is provided
+if [ $LINK -eq 1 ]; then
+  # check if the package name is used in target directory
+  if [ -e "$TARGET_DIR/$package_name" ]; then
+    echo "$TARGET_DIR/$package_name exists already, skipping adding symlink"
+  else
+    ln -s "$REPO_DIR/$package_name" "$TARGET_DIR/$package_name"
+    echo "Linked new package $REPO_DIR/$package_name to $TARGET_DIR/$package_name"
+  fi
+fi
+cd $prevloc
