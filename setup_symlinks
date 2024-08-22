@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+
+# This script finds all folders in the git repo and symlinks them to the target dir
+# Default is to use CWD, but can also take repo dir as param
+REPO_DIR="${1:-$(pwd)}"
+TARGET_DIR="$HOME/ros2_ws/src"
+
+# Check if the REPO_DIR exists and is a directory
+if [ ! -d "$REPO_DIR" ]; then
+  echo "Error: $REPO_DIR is not a valid directoty."
+  exit 1
+fi
+
+for subdir in "$REPO_DIR"/*/; do
+  dirname=$(basename "$subdir")
+
+  target_symlink="$TARGET_DIR/$dirname"
+
+  # Check if exists
+  if [ -e "$target_symlink" ] ; then
+    echo "Skipping $dirname: Name conflict in target directory."
+  elif [ -L "$target_symlink" ]; then
+    echo "Skipping $dirname: Target link already exists."
+  else
+    ln -s "$subdir" "$target_symlink"
+    echo "Created symlink: $target_symlink -> $subdir"
+  fi
+done
