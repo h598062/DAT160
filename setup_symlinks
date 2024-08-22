@@ -2,12 +2,57 @@
 
 # This script finds all folders in the git repo and symlinks them to the target dir
 # Default is to use CWD, but can also take repo dir as param
-REPO_DIR="${1:-$(pwd)}"
+REPO_DIR="$(pwd)"
 TARGET_DIR="$HOME/ros2_ws/src"
+
+usage() {
+  echo "Usage: $0 [-r, --repo <repo_dir>] [-t, --target <target_dir>]"
+  echo "       $0 [-h, --help: Show this help]"
+  echo ""
+  echo "Options:"
+  echo "  -r, --repo <repo_dir>       Specify the repo directory. Defaults to CWD"
+  echo "  -t, --target <target_dir>   Specify the target directory. Defaults to: ~/ros2_ws/src"
+  echo "  -h, --help                  Show this help"
+  exit 0
+}
+
+# Parse commandline options
+while [[ "$#" -gt 0 ]]; do
+  case "$1" in
+    -r|--repo)
+      REPO_DIR="$2"
+      shift 2
+      ;;
+    -t|--target)
+      TARGET_DIR="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      ;;
+    --) # end of all options
+      shift
+      break
+      ;;
+    -?*) # unknown option
+      echo "Unknown option: $1"
+      usage
+      ;;
+    *) # no more options
+      break
+      ;;
+  esac
+done
 
 # Check if the REPO_DIR exists and is a directory
 if [ ! -d "$REPO_DIR" ]; then
   echo "Error: $REPO_DIR is not a valid directoty."
+  exit 1
+fi
+
+# Check if the TARGET_DIR exists and is a directory
+if [ ! -d "$TARGET_DIR" ]; then
+  echo "Error: $TARGET_DIR is not a valid directoty."
   exit 1
 fi
 
