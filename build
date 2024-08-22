@@ -2,7 +2,7 @@
 prevloc=$(pwd)
 cd "$HOME/ros2_ws"
 
-colcon build --symlink-install
+colcon build
 
 source "$HOME/ros2_ws/install/setup.bash"
 
