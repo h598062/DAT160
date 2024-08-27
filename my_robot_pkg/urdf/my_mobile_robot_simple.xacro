@@ -28,7 +28,7 @@
     </visual>
   </link>
 
-<link name="right_wheel">
+  <link name="right_wheel">
     <visual name="right_wheel_visual">
       <origin xyz="0 0 0" rpy="0 1.5707 1.5707"/>
       <geometry>

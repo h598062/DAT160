@@ -17,7 +17,7 @@ def generate_launch_description():
         get_package_share_directory(package_name))
     xacro_file = os.path.join(package_path,
                               'urdf/',
-                              'my_mobile_robot_simple.xacro')
+                              'my_mobile_robot_sensor.xacro')
 
     doc = xacro.parse(open(xacro_file))
     xacro.process_doc(doc)
@@ -40,7 +40,8 @@ def generate_launch_description():
 
     node_tf = Node(package="tf2_ros",
                    executable="static_transform_publisher",
-                   arguments=["0", "0", "0", "0", "0", "0", "map", "base_link"])
+                   arguments=[
+                       "0", "0", "0", "0", "0", "0", "map", "base_link"])
 
     node_rviz = Node(
         package='rviz2',
@@ -52,9 +53,45 @@ def generate_launch_description():
                                 'config', 'config.rviz')]
     )
 
+    world_file_path = os.path.join(
+            get_package_share_directory(package_name),
+            'worlds', 'my_world.world')
+
+    # Include the Gazebo launch file, provided by the gazebo_ros package
+    start_gazebo = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([os.path.join(
+            get_package_share_directory('gazebo_ros'),
+            'launch', 'gazebo.launch.py')]),
+        launch_arguments={'world': world_file_path}.items()
+    )
+
+    # Spawn the robot using gazebo_ros package.
+    spawn_entity = Node(package='gazebo_ros', executable='spawn_entity.py',
+                        arguments=['-topic', 'robot_description',
+                                   '-entity', 'my_mobile_robot'],
+                        output='screen')
+
+    joint_state_broadcaster_spawner = Node(
+        package="controller_manager",
+        executable="spawner.py",
+        arguments=["joint_state_broadcaster",
+                   "--controller-manager", "/controller_manager"],
+    )
+
+    diff_drive_spawner = Node(
+        package="controller_manager",
+        executable="spawner.py",
+        arguments=["diffbot_base_controller",
+                   "--controller-manager", "/controller_manager"],
+    )
+
     return LaunchDescription([
         node_robot_state_publisher,
-        node_joint_state_publisher_gui,
+        # node_joint_state_publisher_gui,
         node_tf,
-        node_rviz
+        node_rviz,
+        start_gazebo,
+        spawn_entity,
+        joint_state_broadcaster_spawner,
+        diff_drive_spawner
     ])
