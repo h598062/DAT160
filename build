@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 PREV_LOC=$(pwd)
 TARGET_DIR="$HOME/ros2_ws"
+USE_SYMLINK=0
 
 usage() {
   echo "This script cd's to the correct dir (or target dir) to run the colcon build command, and returns to CWD"
@@ -44,11 +45,14 @@ while [[ "$#" -gt 0 ]]; do
   esac
 done
 
+echo "Using directory $TARGET_DIR"
 cd "$TARGET_DIR"
 
 if [ "$USE_SYMLINK" -eq 1 ]; then
+  echo "Building with symlink"
   colcon build --symlink-install
 else
+  echo "Building without symlink"
 	colcon build
 fi
 
