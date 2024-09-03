@@ -1,9 +1,57 @@
 #!/usr/bin/env bash
-prevloc=$(pwd)
-cd "$HOME/ros2_ws"
+PREV_LOC=$(pwd)
+TARGET_DIR="$HOME/ros2_ws"
 
-colcon build
+usage() {
+  echo "This script cd's to the correct dir (or target dir) to run the colcon build command, and returns to CWD"
+  echo "It will also source the new setup.bash file so ros2 commands work correctly"
+  echo ""
+  echo "Usage: $0 [-s, --symlink ] [-t, --target <target_dir>]"
+  echo "       $0 [-h, --help: Show this help]"
+  echo ""
+  echo "Options:"
+  echo "  -s, --symlink               Use the symlink option for colcon build"
+  echo "  -t, --target <target_dir>   Specify the target directory. Defaults to: ~/ros2_ws"
+  echo "  -h, --help                  Show this help"
+  exit 0
+}
 
-source "$HOME/ros2_ws/install/setup.bash"
+# Parse commandline options
+while [[ "$#" -gt 0 ]]; do
+  case "$1" in
+    -t|--target)
+      TARGET_DIR="$2"
+      shift 2
+      ;;
+    -s|--symlink)
+      USE_SYMLINK=1
+      shift
+      ;;
+    -h|--help)
+      usage
+      ;;
+    --) # end of all options
+      shift
+      break
+      ;;
+    -?*) # unknown option
+      echo "Unknown option: $1"
+      usage
+      ;;
+    *) # no more options
+      break
+      ;;
+  esac
+done
 
-cd $prevloc
+cd "$TARGET_DIR"
+
+if [ "$USE_SYMLINK" -eq 1 ]; then
+  colcon build --symlink-install
+else
+	colcon build
+fi
+
+source "$TARGET_DIR/install/setup.bash"
+
+cd "$PREV_LOC"
