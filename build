@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-PREV_LOC=$(pwd)
+PREV_LOC="$(pwd)"
 TARGET_DIR="$HOME/ros2_ws"
 USE_SYMLINK=0
 
