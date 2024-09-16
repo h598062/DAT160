@@ -41,22 +41,28 @@ class BraitenbergController(Node):
         # Defines the speed at which the robot will turn around its own axis (value between -1 and 1)
         vel_msg.angular.z = 0.0
 
+        # print(f"left: {self.lidar_left_front}  -  right: {self.lidar_right_front}")
+
         # TODO: Set vel_msg.linear.x and vel_msg.angular.z depending on the
         # values from self.lidar_left_front and self.lidar_right_front
         # print("lidar left front: ", self.lidar_left_front)
+
         avstand = 1.5
-        if self.lidar_left_front < avstand and self.lidar_right_front < avstand:
-            # stopp
+        left = self.lidar_left_front
+        right = self.lidar_right_front
+        if left < avstand and right < avstand and (right-0.5 < left < right+0.5) and (left-0.5 < right < left+0.5):
+            # Stopp
             vel_msg.linear.x = 0.0
             vel_msg.angular.z = 0.0
-        elif self.lidar_left_front < avstand:
-            # sving høyre
-            vel_msg.angular.z = -0.8
-        elif self.lidar_right_front < avstand:
-            # sving venstre
-            vel_msg.angular.z = 0.8
         else:
-            vel_msg.angular.z = 0.0
+            # legg inn en maks grense for utregning av sving
+            if left > avstand:
+                left = avstand
+            if right > avstand:
+                right = avstand
+            # endre sving vinkel til å være differansen mellom sensorene * 2
+            vel_msg.angular.z = (left - right) * 2.0
+            
         # TODO: Publish vel_msg using the previously defined publisher
         self.cmd_vel_pub.publish(vel_msg)
 
