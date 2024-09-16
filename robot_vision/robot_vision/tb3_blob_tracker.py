@@ -26,20 +26,20 @@ class BlobTracker(Node):
 
         # Filter by Area.
         params.filterByArea = False
-        params.minArea = 15
+        params.minArea = 250
         params.maxArea = 6000
 
         # Filter by Circularity
-        params.filterByCircularity = False
-        params.minCircularity = 0.1
+        params.filterByCircularity = True
+        params.minCircularity = 0.7
 
         # Filter by Convexity
         params.filterByConvexity = False
         params.minConvexity = 0.5
 
         # Filter by Inertia
-        params.filterByInertia = False
-        params.minInertiaRatio = 0.01
+        params.filterByInertia = True
+        params.minInertiaRatio = 0.6
 
         # TODO: Create a SimpleBlobDetector object with the parameter object defined above and store it as a property of the class
         self.detector = cv2.SimpleBlobDetector_create(params)
@@ -57,7 +57,20 @@ class BlobTracker(Node):
         # Remember that based on your thresholding method, you might have to invert the binary image with the ~ operator before passing it to the detector.
         #
         # Return the result of the blob detection into the variable 'keypoints':
-        # keypoints =
+        # col_img = cv2.cvtColor(cv_image, cv2.COLOR_BGR2LAB)
+        # col_img = cv2.cvtColor(cv_image, cv2.COLOR_BGR2HSV)
+        # cv2.imshow("Color space changed image", col_img)
+
+        thresholded_img = cv2.inRange(cv_image, np.array([0,0,100]), np.array([10,10,255]))
+        thres_orig_img = cv2.bitwise_and(cv_image, cv_image, mask=thresholded_img)
+        # cv2.imshow("Threshold changed image", thresholded_img)
+        cv2.imshow("Overlayed threshold image", thres_orig_img)
+
+        cv2.waitKey(1)
+
+        finished_img = thresholded_img
+
+        keypoints = self.detector.detect(finished_img)
 
         if keypoints:
             # Assuming the biggest blob is the desired one
@@ -89,6 +102,7 @@ class BlobTracker(Node):
 
     def visual_servoing(self, keypoint, cv_image):
         # DO NOT MODIFY THIS FUNCTION
+        # Måtte øke hastigheten på svingingen til roboten for at den skulle klare å tracke ballen skikkelig
         # Visual servoing logic to control the robot
         x, y = keypoint.pt
         blob_size = keypoint.size
@@ -100,7 +114,8 @@ class BlobTracker(Node):
         twist.linear.x = np.clip(twist.linear.x, -0.75, 0.75)  # Limit the speed
         # Calculate angular velocity to keep the blob centered horizontally
         error_x = x - (cv_image.shape[1] / 2)
-        twist.angular.z = -error_x / 650.0  # Proportional control
+        # endra fra 650 til 300
+        twist.angular.z = -error_x / 300.0  # Proportional control
         # Limit the angular speed
         twist.angular.z = np.clip(twist.angular.z, -1.5, 1.5)
         self.cmd_vel_pub.publish(twist)
