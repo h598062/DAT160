@@ -72,8 +72,9 @@ class BlobTracker(Node):
         threshold_mask = cv2.inRange(lab_img, np.array([0,150,140]), np.array([255,255,255]))
         cv2.imshow("Threshold mask", threshold_mask)
 
-        # result_image = cv2.bitwise_and(lab_img, cv_image, mask=threshold_mask)
-        # cv2.imshow("Result image", result_image)
+        result_image = cv2.bitwise_and(cv_image, cv_image, mask=threshold_mask)
+        cv2.imshow("Result image", result_image)
+
 
         # Function to display LAB values on mouse movement
         def update_mouse_pos(event, x, y, flags, param):
@@ -95,6 +96,8 @@ class BlobTracker(Node):
         cv2.namedWindow("Image with LAB values")
         cv2.setMouseCallback("Image with LAB values", update_mouse_pos)
         create_text_img(lab_img)
+
+
         cv2.waitKey(1)
 
 
