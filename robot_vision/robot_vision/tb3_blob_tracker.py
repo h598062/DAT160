@@ -27,7 +27,7 @@ class BlobTracker(Node):
         # Filter by Area.
         params.filterByArea = True
         params.minArea = 100
-        params.maxArea = 30000
+        params.maxArea = 150000
 
         # Filter by Circularity
         params.filterByCircularity = True
@@ -35,12 +35,12 @@ class BlobTracker(Node):
 
         # Filter by Convexity
         params.filterByConvexity = True
-        params.minConvexity = 0.6
+        params.minConvexity = 0.7
         params.maxConvexity = 1.0
 
         # Filter by Inertia
         params.filterByInertia = True
-        params.minInertiaRatio = 0.5
+        params.minInertiaRatio = 0.8
 
         params.filterByColor = True
         params.blobColor = 255
@@ -69,11 +69,17 @@ class BlobTracker(Node):
         # cv2.imshow("LAB image", lab_img)
         # cv2.imshow("HSV image", hsv_img)
 
-        threshold_mask = cv2.inRange(lab_img, np.array([0,160,145]), np.array([255,255,255]))
+        # Se de individuelle LAB kanalene for å enklere finne gode threshold verdier
+        # lab_L, lab_A, lab_B = cv2.split(lab_img)
+        # cv2.imshow("LAB L channel", lab_L)
+        # cv2.imshow("LAB A channel", lab_A)
+        # cv2.imshow("LAB B channel", lab_B)
+
+        threshold_mask = cv2.inRange(lab_img, np.array([0,163,150]), np.array([255,255,255]))
         cv2.imshow("Threshold mask", threshold_mask)
 
-        result_image = cv2.bitwise_and(cv_image, cv_image, mask=threshold_mask)
-        cv2.imshow("Result image", result_image)
+        # result_image = cv2.bitwise_and(cv_image, cv_image, mask=threshold_mask)
+        # cv2.imshow("Result image", result_image)
 
 
         # Function to display LAB values on mouse movement
@@ -93,9 +99,9 @@ class BlobTracker(Node):
     
             # Show the updated image with LAB values
             cv2.imshow("Image with LAB values", temp_image)
-        cv2.namedWindow("Image with LAB values")
-        cv2.setMouseCallback("Image with LAB values", update_mouse_pos)
-        create_text_img(lab_img)
+        # cv2.namedWindow("Image with LAB values")
+        # cv2.setMouseCallback("Image with LAB values", update_mouse_pos)
+        # create_text_img(lab_img)
 
 
         cv2.waitKey(1)
@@ -123,7 +129,7 @@ class BlobTracker(Node):
         else:
             # No blobs found, stop the robot
             twist = Twist()
-            self.cmd_vel_pub.publish(twist)
+            # self.cmd_vel_pub.publish(twist)
 
             # Only display original image if no blobs found
             blobs = cv_image
