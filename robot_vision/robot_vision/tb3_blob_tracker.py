@@ -69,7 +69,7 @@ class BlobTracker(Node):
         # cv2.imshow("LAB image", lab_img)
         # cv2.imshow("HSV image", hsv_img)
 
-        threshold_mask = cv2.inRange(lab_img, np.array([0,150,140]), np.array([255,255,255]))
+        threshold_mask = cv2.inRange(lab_img, np.array([0,160,145]), np.array([255,255,255]))
         cv2.imshow("Threshold mask", threshold_mask)
 
         result_image = cv2.bitwise_and(cv_image, cv_image, mask=threshold_mask)
