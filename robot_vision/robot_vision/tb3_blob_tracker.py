@@ -25,24 +25,31 @@ class BlobTracker(Node):
         params = cv2.SimpleBlobDetector_Params()
 
         # Filter by Area.
-        params.filterByArea = False
-        params.minArea = 250
-        params.maxArea = 6000
+        params.filterByArea = True
+        params.minArea = 100
+        params.maxArea = 30000
 
         # Filter by Circularity
         params.filterByCircularity = True
-        params.minCircularity = 0.7
+        params.minCircularity = 0.8
 
         # Filter by Convexity
-        params.filterByConvexity = False
-        params.minConvexity = 0.5
+        params.filterByConvexity = True
+        params.minConvexity = 0.6
+        params.maxConvexity = 1.0
 
         # Filter by Inertia
         params.filterByInertia = True
-        params.minInertiaRatio = 0.6
+        params.minInertiaRatio = 0.5
+
+        params.filterByColor = True
+        params.blobColor = 255
 
         # TODO: Create a SimpleBlobDetector object with the parameter object defined above and store it as a property of the class
         self.detector = cv2.SimpleBlobDetector_create(params)
+
+        self.mousex = 0
+        self.mousey = 0
 
     def image_callback(self, data):
         # This converts the image from ROS Image message to OpenCV format
@@ -57,20 +64,41 @@ class BlobTracker(Node):
         # Remember that based on your thresholding method, you might have to invert the binary image with the ~ operator before passing it to the detector.
         #
         # Return the result of the blob detection into the variable 'keypoints':
-        # col_img = cv2.cvtColor(cv_image, cv2.COLOR_BGR2LAB)
-        # col_img = cv2.cvtColor(cv_image, cv2.COLOR_BGR2HSV)
-        # cv2.imshow("Color space changed image", col_img)
+        lab_img = cv2.cvtColor(cv_image, cv2.COLOR_BGR2LAB)
+        # hsv_img = cv2.cvtColor(cv_image, cv2.COLOR_BGR2HSV)
+        # cv2.imshow("LAB image", lab_img)
+        # cv2.imshow("HSV image", hsv_img)
 
-        thresholded_img = cv2.inRange(cv_image, np.array([0,0,100]), np.array([10,10,255]))
-        thres_orig_img = cv2.bitwise_and(cv_image, cv_image, mask=thresholded_img)
-        # cv2.imshow("Threshold changed image", thresholded_img)
-        cv2.imshow("Overlayed threshold image", thres_orig_img)
+        threshold_mask = cv2.inRange(lab_img, np.array([0,150,140]), np.array([255,255,255]))
+        cv2.imshow("Threshold mask", threshold_mask)
 
+        # result_image = cv2.bitwise_and(lab_img, cv_image, mask=threshold_mask)
+        # cv2.imshow("Result image", result_image)
+
+        # Function to display LAB values on mouse movement
+        def update_mouse_pos(event, x, y, flags, param):
+            if event == cv2.EVENT_MOUSEMOVE:  # Check if the mouse is moving
+                self.mousex = x
+                self.mousey = y
+        def create_text_img(lab_image):
+            temp_image = lab_image.copy()
+            l_value, a_value, b_value = lab_image[self.mousey, self.mousex]
+            # Prepare the text to display LAB values
+            text = f"L: {l_value}, A: {a_value}, B: {b_value}"
+    
+            # Draw the text on the image at the bottom-left corner
+            cv2.putText(temp_image, text, (10, temp_image.shape[0] - 10), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+    
+            # Show the updated image with LAB values
+            cv2.imshow("Image with LAB values", temp_image)
+        cv2.namedWindow("Image with LAB values")
+        cv2.setMouseCallback("Image with LAB values", update_mouse_pos)
+        create_text_img(lab_img)
         cv2.waitKey(1)
 
-        finished_img = thresholded_img
 
-        keypoints = self.detector.detect(finished_img)
+        keypoints = self.detector.detect(threshold_mask)
 
         if keypoints:
             # Assuming the biggest blob is the desired one
@@ -102,7 +130,6 @@ class BlobTracker(Node):
 
     def visual_servoing(self, keypoint, cv_image):
         # DO NOT MODIFY THIS FUNCTION
-        # Måtte øke hastigheten på svingingen til roboten for at den skulle klare å tracke ballen skikkelig
         # Visual servoing logic to control the robot
         x, y = keypoint.pt
         blob_size = keypoint.size
@@ -114,8 +141,7 @@ class BlobTracker(Node):
         twist.linear.x = np.clip(twist.linear.x, -0.75, 0.75)  # Limit the speed
         # Calculate angular velocity to keep the blob centered horizontally
         error_x = x - (cv_image.shape[1] / 2)
-        # endra fra 650 til 300
-        twist.angular.z = -error_x / 300.0  # Proportional control
+        twist.angular.z = -error_x / 650.0  # Proportional control
         # Limit the angular speed
         twist.angular.z = np.clip(twist.angular.z, -1.5, 1.5)
         self.cmd_vel_pub.publish(twist)
