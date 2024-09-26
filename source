@@ -1,2 +1,2 @@
 #!/usr/bin/env bash
-source "~/ros2_ws/install/setup.bash"
+source "$HOME/ros2_ws/install/setup.bash"
