@@ -56,6 +56,6 @@ else
 	colcon build
 fi
 
-source "$TARGET_DIR/install/setup.bash"
-
 cd "$PREV_LOC"
+
+echo "run '. source' to complete the build step"

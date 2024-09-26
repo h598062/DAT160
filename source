@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+source "$TARGET_DIR/install/setup.bash"
