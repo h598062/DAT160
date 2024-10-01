@@ -2,13 +2,14 @@ import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist
 from sensor_msgs.msg import LaserScan
+from rclpy.qos import qos_profile_sensor_data
 
 
 class WallfollowerController(Node):
     def __init__(self):
         super().__init__("bug2_navigation")
 
-        self.scan = self.create_subscription(LaserScan, "/scan", self.clbk_laser, 10)
+        self.scan = self.create_subscription(LaserScan, "/scan", self.clbk_laser, qos_profile_sensor_data)
         self.cmd_vel_pub = self.create_publisher(Twist, "/cmd_vel", 10)
 
         # Front lidars
@@ -34,18 +35,19 @@ class WallfollowerController(Node):
         self.timer = self.create_timer(timer_period, self.timer_callback)
 
     def clbk_laser(self, msg):
+        # print(msg.ranges)
         # Read the front lidars
         self.lidar_front_left = msg.ranges[12]  # 12 deg to the left
-        self.lidar_front_middle = msg.ranges[0]  # direct infront
+        self.lidar_front_middle = msg.ranges[0] or 10.0 # direct infront
         self.lidar_front_right = msg.ranges[348]  # 12 deg to the right (360 - 12)
         # Read the left lidars
-        self.lidar_left_f = msg.ranges[74]  # 16 deg infront of 90
-        self.lidar_left_m = msg.ranges[90]  # 90 deg left
-        self.lidar_left_b = msg.ranges[106]  # 16 deg behind 90
+        self.lidar_left_f = msg.ranges[74] or 10.0 # 16 deg infront of 90
+        self.lidar_left_m = msg.ranges[90] or 10.0 # 90 deg left
+        self.lidar_left_b = msg.ranges[106] or 10.0 # 16 deg behind 90
         # Read the right lidars
-        self.lidar_right_f = msg.ranges[286]  # 16 deg infront of 270
-        self.lidar_right_m = msg.ranges[270]  # 270 deg right
-        self.lidar_right_b = msg.ranges[254]  # 16 deg behind 270
+        self.lidar_right_f = msg.ranges[286] or 10.0 # 16 deg infront of 270
+        self.lidar_right_m = msg.ranges[270] or 10.0 # 270 deg right
+        self.lidar_right_b = msg.ranges[254] or 10.0 # 16 deg behind 270
 
     def timer_callback(self):
         vel_msg = Twist()
@@ -61,21 +63,22 @@ class WallfollowerController(Node):
         lm = self.lidar_left_m
         lb = self.lidar_left_b
 
-        mode1_dst = 0.6
-        mode2_dst = 0.6
-        mode3_dst = 0.7
+        # return
+        mode0_dst = 0.3
+        mode1_dst = 0.3
+        mode2_dst = 0.3
+        mode3_dst = 0.4
         # print(
         #     f"fl: {fl:.2f} - fm: {fm:.2f} - fr: {fr:.2f} - rf: {rf:.2f} - rm: {rm:.2f} - rb: {rb:.2f} - lf: {lf:.2f} - lm: {lm:.2f} - lb: {lb:.2f}"
         # )
 
         if self.mode == 0:
-            # print(
-            #     f"fl: {fl:.2f} - fm: {fm:.2f} - fr: {fr:.2f} - rf: {rf:.2f} - rm: {rm:.2f} - rb: {rb:.2f} - lf: {lf:.2f} - lm: {lm:.2f} - lb: {lb:.2f}"
-            # )
-            dst = 0.5
+            print(
+                f"fl: {fl:.2f} - fm: {fm:.2f} - fr: {fr:.2f} - rf: {rf:.2f} - rm: {rm:.2f} - rb: {rb:.2f} - lf: {lf:.2f} - lm: {lm:.2f} - lb: {lb:.2f}"
+            )
             fw_speed = 0.2
             turn_speed = 0.0
-            if fm < dst:
+            if fm < mode0_dst:
                 self.mode = 2
                 self.tracking_wall = "right"
                 print("Found wall, activated mode 2: Turning")
@@ -137,7 +140,7 @@ class WallfollowerController(Node):
                         self.wall_dissappeared = True
                         turn_speed = 0.0
                 else:
-                    turn_speed = constrain((rb - rf) * 2, -1.0, 1.0)
+                    turn_speed = constrain((rb - rf) * 3, -1.0, 1.0)
 
             if fm < mode1_dst:
                 turn_speed = 0.0
@@ -169,15 +172,22 @@ def constrain(value, min_val, max_val):
 
 
 def main(args=None):
-    rclpy.init(args=args)
+    try:
+        rclpy.init(args=args)
 
-    controller = WallfollowerController()
+        controller = WallfollowerController()
 
-    rclpy.spin(controller)
+        rclpy.spin(controller)
 
-    controller.destroy_node()
-    rclpy.shutdown()
-
+        controller.destroy_node()
+        rclpy.shutdown()
+    except KeyboardInterrupt as e:
+        print(f"Exiting program cleanly... {e}")
+        msg = Twist()
+        msg.linear.x = 0.0
+        msg.angular.z = 0.0
+        controller.cmd_vel_pub.publish(msg)
+        rclpy.shutdown()
 
 if __name__ == "__main__":
     main()
