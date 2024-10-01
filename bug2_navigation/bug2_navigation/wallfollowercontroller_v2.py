@@ -1,174 +1,112 @@
 import rclpy
+import math
+import numpy as np
+from rclpy.logging import LoggingSeverity
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from geometry_msgs.msg import Twist
 from sensor_msgs.msg import LaserScan
 from tf_transformations import euler_from_quaternion
+from nav_msgs.msg import Odometry
 
 
-class WallfollowerController(Node):
+class WallfollowerController_v2(Node):
     def __init__(self):
         super().__init__("wall_follower")
+        self.get_logger().set_level(LoggingSeverity.INFO)
 
         self.scan = self.create_subscription(
             LaserScan, "/scan", self.clbk_laser, qos_profile_sensor_data
         )
+        self.odometer = self.create_subscription(
+            Odometry, "/odom", self.clbk_odom, qos_profile_sensor_data
+        )
         self.cmd_vel_pub = self.create_publisher(Twist, "/cmd_vel", 10)
+        self.timer = None
+        # Do not enable timer until we have recieved a message
+        self.first_message = True
 
         self.position = 0
         self.yaw = 0
 
-        # Front lidars
-        self.lidar_front_left = 100
-        self.lidar_front_middle = 100
-        self.lidar_front_right = 100
-        # Left side lidars
-        self.lidar_left_f = 100
-        self.lidar_left_m = 100
-        self.lidar_left_b = 100
-        # Right side lidars
-        self.lidar_right_f = 100
-        self.lidar_right_m = 100
-        self.lidar_right_b = 100
+        # Modes: drive, turn, stop
+        self.mode = "drive"
 
-        self.mode = 0
-        self.tracking_wall = ""
-        self.wall_dissappeared = False
+        # if a desired direction cannot be calculated, use this
+        self.default_direction = "left"
 
-        print("Starting mode 0, looking for a wall...")
+        self.laser = []
+        self.laser_increment = 0.0
 
-        timer_period = 0.1
-        self.timer = self.create_timer(timer_period, self.timer_callback)
+        self.get_logger().info("Started the wallfollower controller")
 
-    def clbk_laser(self, msg):
-        # Read the front lidars
-        self.lidar_front_left = msg.ranges[12]  # 12 deg to the left
-        self.lidar_front_middle = msg.ranges[0]  # direct infront
-        self.lidar_front_right = msg.ranges[348]  # 12 deg to the right (360 - 12)
-        # Read the left lidars
-        self.lidar_left_f = msg.ranges[74]  # 16 deg infront of 90
-        self.lidar_left_m = msg.ranges[90]  # 90 deg left
-        self.lidar_left_b = msg.ranges[106]  # 16 deg behind 90
-        # Read the right lidars
-        self.lidar_right_f = msg.ranges[286]  # 16 deg infront of 270
-        self.lidar_right_m = msg.ranges[270]  # 270 deg right
-        self.lidar_right_b = msg.ranges[254]  # 16 deg behind 270
+    def set_timer(self):
+        if self.timer is None:
+            self.get_logger().info("Got first laserscan message, starting...")
+            timer_period = 0.1
+            self.timer = self.create_timer(timer_period, self.timer_callback)
+        else:
+            self.get_logger().warning(
+                "Attempted to set the timer when it already exists"
+            )
+
+    def clbk_laser(self, msg: LaserScan):
+        if self.first_message:
+            self.first_message = False
+            self.set_timer()
+            self.laser_increment = math.degrees(msg.angle_increment)
+        self.laser = fix_laser_array(msg.ranges)
+        self.get_logger().debug(
+            f"Laser Scan: {msg.ranges}\nFixed laser array: {self.laser}"
+        )
 
     def timer_callback(self):
-        vel_msg = Twist()
+        msg = Twist()
         fw_speed = 0.0
         turn_speed = 0.0
-        fr = self.lidar_front_right
-        fm = self.lidar_front_middle
-        fl = self.lidar_front_left
-        rf = self.lidar_right_f
-        rm = self.lidar_right_m
-        rb = self.lidar_right_b
-        lf = self.lidar_left_f
-        lm = self.lidar_left_m
-        lb = self.lidar_left_b
 
-        mode1_dst = 0.6
-        mode2_dst = 0.6
-        mode3_dst = 0.7
-        # print(
-        #     f"fl: {fl:.2f} - fm: {fm:.2f} - fr: {fr:.2f} - rf: {rf:.2f} - rm: {rm:.2f} - rb: {rb:.2f} - lf: {lf:.2f} - lm: {lm:.2f} - lb: {lb:.2f}"
-        # )
+        drive_min_dst = 0.3
+        turn_min_dst = 0.5
 
-        if self.mode == 0:
-            # print(
-            #     f"fl: {fl:.2f} - fm: {fm:.2f} - fr: {fr:.2f} - rf: {rf:.2f} - rm: {rm:.2f} - rb: {rb:.2f} - lf: {lf:.2f} - lm: {lm:.2f} - lb: {lb:.2f}"
-            # )
-            dst = 0.5
-            fw_speed = 0.2
-            turn_speed = 0.0
-            if fm < dst:
-                self.mode = 2
-                self.tracking_wall = "right"
-                print("Found wall, activated mode 2: Turning")
-        if self.mode == 2:
-            fw_speed = 0.005
-            if self.tracking_wall == "right":
-                print(f"fm: {fm:.2f} - rf: {rf:.2f} - rm: {rm:.2f} - rb: {rb:.2f}")
-                turn_speed = 1.0
-                if (
-                    fm >= mode2_dst
-                    and rm <= rb
-                    and rm <= rf
-                    and abs(rb - rf) < 0.1
-                    and rm < mode2_dst
-                ):
-                    turn_speed = 0.0
-                    fw_speed = 0.0
-                    self.mode = 1
-                    print("Finished turning, activated mode 1: follow wall")
-            elif self.tracking_wall == "left":
-                # print(f"lf: {lf:.2f} - lm: {lm:.2f} - lb: {lb:.2f}")
-                turn_speed = -1.0
-                if (
-                    fm >= mode2_dst
-                    and lm <= lb
-                    and lm <= lf
-                    and abs(lb - lf) < 0.1
-                    and lm < mode2_dst
-                ):
-                    turn_speed = 0.0
-                    fw_speed = 0.0
-                    self.mode = 1
-                    print("Finished turning, activated mode 1: follow wall")
+        # formatted_list = [f"{x:.2f}" for x in self.laser[80:101:1]]
+        # self.get_logger().info(f"Front 40: {formatted_list}")
+
+        # når en vegg kommer for nærme foran (30 grader, 90+-15)
+        # Finn nærmeste vinkel som er lengre unna enn en viss avstand
+        # bruk laser_increment til å finne ønsket vinkel (fra current yaw)
+        # roter til vi matcher denne vinkel
+        # fortsett kjøring
+        # hvis vinkel ikke finnes, stopp
+
+        if self.mode == "drive":
+            fw_speed = 0.5
+            fw_dst_avg = float(np.average(self.laser[85:96]))
+            # self.get_logger().info(f"fw_dst_avg: {fw_dst_avg}")
+            fw_dst_avg = constrain(fw_dst_avg, 0.0, 2.0)
+            # self.get_logger().info(f"fw_dst_avg: {fw_dst_avg}")
+            if fw_dst_avg >= drive_min_dst:
+                fw_speed = translate(fw_dst_avg, drive_min_dst, 2.0, 0.05, fw_speed)
+                # self.get_logger().info(f"fw_speed: {fw_speed}")
             else:
-                vel_msg.linear.x = 0.0
-                vel_msg.angular.z = 0.0
-                self.cmd_vel_pub.publish(vel_msg)
-                raise Exception(
-                    "ERROR: i am in mode 2 (Turning) but i am not tracking a wall"
-                )
-
-        if self.mode == 1:
-            # print(
-            #     f"fl: {fl:.2f} - fm: {fm:.2f} - fr: {fr:.2f} - rf: {rf:.2f} - rm: {rm:.2f} - rb: {rb:.2f} - lf: {lf:.2f} - lm: {lm:.2f} - lb: {lb:.2f}"
-            # )
-            fw_speed = 0.2
-            if rm <= rb and rm <= rf:
-                turn_speed = 0.0
-            else:
-                if rf > rm + mode1_dst:
-                    fw_speed = 0.05
-                    if self.wall_dissappeared:
-                        if rm > rb + mode1_dst:
-                            print("Wall dissappeared, going mode 3")
-                            self.mode = 3
-                            fw_speed = 0.0
-                    else:
-                        print("wall disappeared maybe")
-                        self.wall_dissappeared = True
-                        turn_speed = 0.0
-                else:
-                    turn_speed = constrain((rb - rf) * 2, -1.0, 1.0)
-
-            if fm < mode1_dst:
-                turn_speed = 0.0
                 fw_speed = 0.0
-                print("Found new wall, going mode 2")
-                self.mode = 2
+                self.changeMode("turn")
 
-        if self.mode == 3:
-            print(f"fm: {fm:.2f} - rf: {rf:.2f} - rm: {rm:.2f} - rb: {rb:.2f}")
-            turn_speed = -0.4
-            fw_speed = 0.2
-            if rf <= mode3_dst:
-                turn_speed = -0.1
-            if rm <= mode3_dst and rf <= mode3_dst + 0.2 and rb <= mode3_dst + 0.2:
-                print("re-found the wall, continuing mode 1")
-                fw_speed = 0.0
-                self.mode = 1
-            elif fm < mode2_dst:
-                print("found a wall in front, going mode 2")
-                self.mode = 2
+        self.get_logger().info(f"fw_speed: {fw_speed} - turn_speed: {turn_speed}")
+        msg.linear.x = fw_speed
+        msg.angular.z = turn_speed
+        self.cmd_vel_pub.publish(msg)
 
-        vel_msg.linear.x = fw_speed
-        vel_msg.angular.z = turn_speed
-        self.cmd_vel_pub.publish(vel_msg)
+    def changeMode(self, mode: str):
+        if mode == "drive":
+            self.mode = mode
+        elif mode == "turn":
+            self.mode = mode
+        elif mode == "stop":
+            self.mode = mode
+        else:
+            self.get_logger().error(f"Got invalid mode: {mode}")
+            return
+        self.get_logger().info(f"Switching to mode: {mode}")
 
     def clbk_odom(self, msg):
         self.position = msg.pose.pose.position
@@ -183,13 +121,48 @@ class WallfollowerController(Node):
         self.yaw = euler[2]
 
 
-def constrain(value, min_val, max_val):
+def translate(
+    value: float, min: float, max: float, result_min: float, result_max: float
+) -> float:
+    """
+    Translates a value from a min/max range into another min/max range
+    """
+    orig_span = max - min
+    result_span = result_max - result_min
+    val_scaled = (value - min) / orig_span
+    return result_min + (val_scaled * result_span)
+
+
+def constrain(
+    value,
+    min_val,
+    max_val,
+):
+    """
+    constrains a value between min_val and max_val
+    the arguments must work with max() and min() functions
+    """
     return max(min_val, min(max_val, value))
+
+
+def fix_laser_array(array):
+    """
+    expects an array with 360 elements.
+      0-180 == left side
+    360-180 == right side
+    extracts values from 90->0->270
+    this will then be the front half circle of the bot
+    new list starts at 0 on the rightmost part, and ends at 180 on leftmost part
+    90 is straight forwards
+    """
+    newlist = array[270:360]
+    newlist.extend(array[0:91])
+    return newlist
 
 
 def main(args=None):
     rclpy.init(args=args)
-    controller = WallfollowerController()
+    controller = WallfollowerController_v2()
     try:
         rclpy.spin(controller)
     except KeyboardInterrupt:

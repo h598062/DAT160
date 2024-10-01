@@ -34,6 +34,7 @@ setup(
     entry_points={
         "console_scripts": [
             "wallfollowercontroller = bug2_navigation.wallfollowercontroller:main",
+            "wallfollowercontroller_v2 = bug2_navigation.wallfollowercontroller_v2:main",
         ],
     },
 )
