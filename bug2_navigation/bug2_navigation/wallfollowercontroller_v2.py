@@ -1,15 +1,22 @@
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
 from geometry_msgs.msg import Twist
 from sensor_msgs.msg import LaserScan
+from tf_transformations import euler_from_quaternion
 
 
 class WallfollowerController(Node):
     def __init__(self):
         super().__init__("wall_follower")
 
-        self.scan = self.create_subscription(LaserScan, "/scan", self.clbk_laser, 10)
+        self.scan = self.create_subscription(
+            LaserScan, "/scan", self.clbk_laser, qos_profile_sensor_data
+        )
         self.cmd_vel_pub = self.create_publisher(Twist, "/cmd_vel", 10)
+
+        self.position = 0
+        self.yaw = 0
 
         # Front lidars
         self.lidar_front_left = 100
@@ -162,6 +169,18 @@ class WallfollowerController(Node):
         vel_msg.linear.x = fw_speed
         vel_msg.angular.z = turn_speed
         self.cmd_vel_pub.publish(vel_msg)
+
+    def clbk_odom(self, msg):
+        self.position = msg.pose.pose.position
+
+        quaternion = (
+            msg.pose.pose.orientation.x,
+            msg.pose.pose.orientation.y,
+            msg.pose.pose.orientation.z,
+            msg.pose.pose.orientation.w,
+        )
+        euler = euler_from_quaternion(quaternion)
+        self.yaw = euler[2]
 
 
 def constrain(value, min_val, max_val):

@@ -7,7 +7,7 @@ from tf_transformations import euler_from_quaternion
 
 class GoToPointController(Node):
     def __init__(self):
-        super().__init__("bug2_navigation")
+        super().__init__("go_to_point")
 
         self.scan = self.create_subscription(Odometry, "/odom", self.clbk_odom, 10)
         self.cmd_vel_pub = self.create_publisher(Twist, "/cmd_vel", 10)
@@ -46,13 +46,18 @@ def constrain(value, min_val, max_val):
 
 def main(args=None):
     rclpy.init(args=args)
-
     controller = GoToPointController()
-
-    rclpy.spin(controller)
-
-    controller.destroy_node()
-    rclpy.shutdown()
+    try:
+        rclpy.spin(controller)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        msg = Twist()
+        msg.linear.x = 0.0
+        msg.angular.z = 0.0
+        controller.cmd_vel_pub.publish(msg)
+        controller.destroy_node()
+        rclpy.shutdown()
 
 
 if __name__ == "__main__":
