@@ -35,6 +35,7 @@ setup(
         "console_scripts": [
             "wallfollowercontroller = bug2_navigation.wallfollowercontroller:main",
             "wallfollowercontroller_v2 = bug2_navigation.wallfollowercontroller_v2:main",
+            "gotopointcontroller = bug2_navigation.gotopointcontroller:main",
         ],
     },
 )
