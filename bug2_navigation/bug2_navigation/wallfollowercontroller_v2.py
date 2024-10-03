@@ -1,3 +1,4 @@
+from time import sleep
 import rclpy
 import math
 import numpy as np
@@ -35,8 +36,8 @@ class WallfollowerController_v2(Node):
         # if a desired direction cannot be calculated, use this
         self.default_direction = "left"
 
-        self.laser = []
-        self.laser_increment = 0.0
+        self.lidar = []
+        self.angle_increment = 0.0
 
         self.get_logger().info("Started the wallfollower controller")
 
@@ -54,59 +55,28 @@ class WallfollowerController_v2(Node):
         if self.first_message:
             self.first_message = False
             self.set_timer()
-            self.laser_increment = math.degrees(msg.angle_increment)
-        self.laser = fix_laser_array(msg.ranges)
-        self.get_logger().debug(
-            f"Laser Scan: {msg.ranges}\nFixed laser array: {self.laser}"
-        )
+            self.angle_increment = msg.angle_increment
+
+        self.lidar = msg.ranges
 
     def timer_callback(self):
         msg = Twist()
         fw_speed = 0.0
         turn_speed = 0.0
+        # make a copy so it doesnt change during calculation
+        lidar = np.copy(self.lidar)
 
-        drive_min_dst = 0.3
-        turn_min_dst = 0.5
+        front_dist, left_dist, right_dist = self.get_wall_distances(lidar)
 
-        # formatted_list = [f"{x:.2f}" for x in self.laser[80:101:1]]
-        # self.get_logger().info(f"Front 40: {formatted_list}")
+        # Decide on the direction and speed
+        fw_speed, turn_speed = self.decide_direction(front_dist, left_dist, right_dist)
 
-        # når en vegg kommer for nærme foran (30 grader, 90+-15)
-        # Finn nærmeste vinkel som er lengre unna enn en viss avstand
-        # bruk laser_increment til å finne ønsket vinkel (fra current yaw)
-        # roter til vi matcher denne vinkel
-        # fortsett kjøring
-        # hvis vinkel ikke finnes, stopp
-
-        if self.mode == "drive":
-            fw_speed = 0.5
-            fw_dst_avg = float(np.average(self.laser[85:96]))
-            # self.get_logger().info(f"fw_dst_avg: {fw_dst_avg}")
-            fw_dst_avg = constrain(fw_dst_avg, 0.0, 2.0)
-            # self.get_logger().info(f"fw_dst_avg: {fw_dst_avg}")
-            if fw_dst_avg >= drive_min_dst:
-                fw_speed = translate(fw_dst_avg, drive_min_dst, 2.0, 0.05, fw_speed)
-                # self.get_logger().info(f"fw_speed: {fw_speed}")
-            else:
-                fw_speed = 0.0
-                self.changeMode("turn")
-
-        self.get_logger().info(f"fw_speed: {fw_speed} - turn_speed: {turn_speed}")
+        self.get_logger().info(
+            f"fw_speed: {fw_speed} - turn_speed: {turn_speed} - fd: {front_dist:.2f} - ld: {left_dist:.2f} - rd: {right_dist:.2f}"
+        )
         msg.linear.x = fw_speed
         msg.angular.z = turn_speed
         self.cmd_vel_pub.publish(msg)
-
-    def changeMode(self, mode: str):
-        if mode == "drive":
-            self.mode = mode
-        elif mode == "turn":
-            self.mode = mode
-        elif mode == "stop":
-            self.mode = mode
-        else:
-            self.get_logger().error(f"Got invalid mode: {mode}")
-            return
-        self.get_logger().info(f"Switching to mode: {mode}")
 
     def clbk_odom(self, msg):
         self.position = msg.pose.pose.position
@@ -119,6 +89,50 @@ class WallfollowerController_v2(Node):
         )
         euler = euler_from_quaternion(quaternion)
         self.yaw = euler[2]
+
+    def get_wall_distances(self, lasers):
+        # Get mean distance for each region to detect walls
+        front_distances = np.append(lasers[330:361], lasers[0:31])
+        left_distances = lasers[30:91]
+        right_distances = lasers[270:331]
+
+        # Calculate the average distance in each region (you can also use min distance)
+        front_mean = np.mean(front_distances)
+        left_mean = np.mean(left_distances)
+        right_mean = np.mean(right_distances)
+
+        return front_mean, left_mean, right_mean
+
+    def decide_direction(
+        self,
+        front_dist: float,
+        left_dist: float,
+        right_dist: float,
+        distance_threshold: float = 0.5,
+    ):
+        fw_speed = 0.2  # default forward speed
+        turn_speed = 0.0  # default no turning
+
+        if front_dist < distance_threshold:
+            # Wall in front, decide based on left and right distances
+            if left_dist > right_dist:
+                turn_speed = 0.9  # Turn left
+            else:
+                turn_speed = -0.9  # Turn right
+            fw_speed = 0.0  # Stop moving forward when turning
+        else:
+            # No wall in front, move forward and adjust for side walls
+            if left_dist < distance_threshold:
+                # Too close to the left wall, turn slightly right
+                turn_speed = -0.5
+            elif right_dist < distance_threshold:
+                # Too close to the right wall, turn slightly left
+                turn_speed = 0.5
+            else:
+                # No nearby walls, continue straight
+                turn_speed = 0.0
+
+        return fw_speed, turn_speed
 
 
 def translate(
@@ -145,33 +159,19 @@ def constrain(
     return max(min_val, min(max_val, value))
 
 
-def fix_laser_array(array):
-    """
-    expects an array with 360 elements.
-      0-180 == left side
-    360-180 == right side
-    extracts values from 90->0->270
-    this will then be the front half circle of the bot
-    new list starts at 0 on the rightmost part, and ends at 180 on leftmost part
-    90 is straight forwards
-    """
-    newlist = array[270:360]
-    newlist.extend(array[0:91])
-    return newlist
-
-
 def main(args=None):
     rclpy.init(args=args)
     controller = WallfollowerController_v2()
     try:
         rclpy.spin(controller)
     except KeyboardInterrupt:
-        pass
+        print("Exiting program...")
     finally:
         msg = Twist()
         msg.linear.x = 0.0
         msg.angular.z = 0.0
         controller.cmd_vel_pub.publish(msg)
+        sleep(1)
         controller.destroy_node()
         rclpy.shutdown()
 
