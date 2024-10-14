@@ -1,22 +1,30 @@
 import math
+from time import sleep
 import rclpy
+from rclpy.logging import LoggingSeverity
 from rclpy.node import Node
 
 from geometry_msgs.msg import Twist, Point
 from nav_msgs.msg import Odometry
 from tf_transformations import euler_from_quaternion
-#TODO: import the custom service type that you have created in your bug2_interfaces package
 
+# import the custom service type that you have created in your bug2_interfaces package
+from bug2_interfaces.srv import Bug2Goto
 
 
 class GoToPointClass(Node):
     def __init__(self):
-        super().__init__('GoToPointController')
+        super().__init__("GoToPointController")
 
-        self.odom_sub = self.create_subscription(Odometry, '/odom', self.clbk_odom, 10)
-        self.vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
+        self.odom_sub = self.create_subscription(Odometry, "/odom", self.clbk_odom, 10)
+        self.vel_pub = self.create_publisher(Twist, "/cmd_vel", 10)
 
-        #TODO: Create Service Server Definition
+        # Create Service Server Definition
+        self.srv = self.create_service(
+            Bug2Goto, "go_to_point_service", self.service_callback
+        )
+
+        self.get_logger().set_level(LoggingSeverity.WARN)
 
         self.position = Point()
         self.yaw = 0.0
@@ -29,7 +37,20 @@ class GoToPointClass(Node):
         timer_period = 0.1  # seconds
         self.timer = self.create_timer(timer_period, self.timer_callback)
 
-    #TODO: Create Callback Function for the Service Server that sets the self.active variable True or False AND changes the self.desired_position depending on the request message 
+    # Create Callback Function for the Service Server that sets the self.active
+    # variable True or False AND changes the self.desired_position depending on the request message
+    def service_callback(
+        self, request: Bug2Goto.Request, response: Bug2Goto.Response
+    ) -> Bug2Goto.Response:
+        print(f"Request: {request}")
+        if request.move_switch:
+            self.active = True
+            if request.target_position:
+                self.desired_position = request.target_position
+        else:
+            self.active = False
+        response.success = True
+        return response
 
     def clbk_odom(self, msg):
         self.position = msg.pose.pose.position
@@ -38,17 +59,17 @@ class GoToPointClass(Node):
             msg.pose.pose.orientation.x,
             msg.pose.pose.orientation.y,
             msg.pose.pose.orientation.z,
-            msg.pose.pose.orientation.w)
+            msg.pose.pose.orientation.w,
+        )
         euler = euler_from_quaternion(quaternion)
         self.yaw = euler[2]
 
     def change_state(self, state):
         self.state = state
-        #rospy.loginfo('State changed to '+str(self.state))
-        self.get_logger().info('State changed to '+str(self.state))
+        self.get_logger().info("State changed to " + str(self.state))
 
     def normalize_angle(self, angle):
-        if(math.fabs(angle) > math.pi):
+        if math.fabs(angle) > math.pi:
             angle = angle - (2 * math.pi * angle) / (math.fabs(angle))
         return angle
 
@@ -57,10 +78,12 @@ class GoToPointClass(Node):
         twist_msg.linear.x = 0.0
         twist_msg.angular.z = 0.0
         self.vel_pub.publish(twist_msg)
-        self.get_logger().info('go-to-point -> finished')
+        self.get_logger().info("go-to-point -> finished")
 
     def fix_yaw(self, des_pos):
-        desired_yaw = math.atan2(des_pos.y - self.position.y, des_pos.x - self.position.x)
+        desired_yaw = math.atan2(
+            des_pos.y - self.position.y, des_pos.x - self.position.x
+        )
         err_yaw = self.normalize_angle(desired_yaw - self.yaw)
 
         twist_msg = Twist()
@@ -68,23 +91,27 @@ class GoToPointClass(Node):
             twist_msg.angular.z = 0.3 if err_yaw > 0.0 else -0.3
 
         self.vel_pub.publish(twist_msg)
-        self.get_logger().info('Yaw error: ['+str(err_yaw)+']')
+        self.get_logger().info("Yaw error: [" + str(err_yaw) + "]")
 
-        #state change condition
+        # state change condition
         if math.fabs(err_yaw) <= self.yaw_precision:
             self.change_state(1)
 
     def go_straight_ahead(self, des_pos):
-        desired_yaw = math.atan2(des_pos.y - self.position.y, des_pos.x - self.position.x)
+        desired_yaw = math.atan2(
+            des_pos.y - self.position.y, des_pos.x - self.position.x
+        )
         err_yaw = self.normalize_angle(desired_yaw - self.yaw)
-        err_pos = math.sqrt(pow(des_pos.y - self.position.y, 2) + pow(des_pos.x - self.position.x, 2))
+        err_pos = math.sqrt(
+            pow(des_pos.y - self.position.y, 2) + pow(des_pos.x - self.position.x, 2)
+        )
 
         if err_pos > self.dist_precision:
             twist_msg = Twist()
             twist_msg.linear.x = 0.3
             self.vel_pub.publish(twist_msg)
         else:
-            self.get_logger().info('Position error: '+str(err_pos))
+            self.get_logger().info("Position error: " + str(err_pos))
             self.change_state(2)
 
         # state change condition
@@ -93,14 +120,17 @@ class GoToPointClass(Node):
 
     def timer_callback(self):
         if not self.active:
-            dist_to_target = math.sqrt(pow(self.desired_position.y - self.position.y, 2) + pow(self.desired_position.x - self.position.x, 2))
+            dist_to_target = math.sqrt(
+                pow(self.desired_position.y - self.position.y, 2)
+                + pow(self.desired_position.x - self.position.x, 2)
+            )
             if dist_to_target < 0.15:
                 twist_msg = Twist()
                 twist_msg.linear.x = 0.0
                 twist_msg.angular.z = 0.0
                 self.vel_pub.publish(twist_msg)
             return
-        
+
         if self.state == 0:
             self.fix_yaw(self.desired_position)
         elif self.state == 1:
@@ -108,20 +138,25 @@ class GoToPointClass(Node):
         elif self.state == 2:
             self.done()
             self.active = False
-            
+
         else:
-            self.get_logger().error('Unknown state!')
-            
+            self.get_logger().error("Unknown state!")
+
 
 def main(args=None):
     rclpy.init(args=args)
-
     controller = GoToPointClass()
+    try:
+        rclpy.spin(controller)
+    except KeyboardInterrupt:
+        print("Exiting program...")
+    finally:
+        msg = Twist()
+        controller.vel_pub.publish(msg)
+        sleep(1)
+        controller.destroy_node()
+        rclpy.shutdown()
 
-    rclpy.spin(controller)
-    controller.destroy_node()
-    rclpy.shutdown()
 
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

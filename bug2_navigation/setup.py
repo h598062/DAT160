@@ -36,6 +36,9 @@ setup(
             "wallfollowercontroller = bug2_navigation.wallfollowercontroller:main",
             "wallfollowercontroller_v2 = bug2_navigation.wallfollowercontroller_v2:main",
             "gotopointcontroller = bug2_navigation.gotopointcontroller:main",
+            "wall_follower = bug2_navigation.wall_follower:main",
+            "go_to_point = bug2_navigation.go_to_point:main",
+            "bug2_navigation = bug2_navigation.bug2_navigation:main",
         ],
     },
 )
