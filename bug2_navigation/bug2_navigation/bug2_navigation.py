@@ -42,8 +42,8 @@ class Bug2_navigator(Node):
         self.wallfollow_switch_dst = 10.0
 
         self.target = Point()
-        self.target.x = -6.0
-        self.target.y = 3.4
+        self.target.x = 6.0
+        self.target.y = 7.4
 
         self.mode = 1
         self.mode_dict = {"wallfollow": 2, "gotopoint": 1}

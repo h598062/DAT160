@@ -48,6 +48,8 @@ class GoToPointClass(Node):
             if request.target_position:
                 self.desired_position = request.target_position
         else:
+            self.state = 0
+            self.vel_pub.publish(Twist())
             self.active = False
         response.success = True
         return response

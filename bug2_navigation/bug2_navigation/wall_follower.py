@@ -52,6 +52,7 @@ class WallFollowerClass(Node):
         if request.data:
             self.active = True
         else:
+            self.state = 0
             self.active = False
             self.vel_pub.publish(Twist())
         response.success = True
