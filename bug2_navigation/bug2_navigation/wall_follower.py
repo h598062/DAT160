@@ -53,6 +53,7 @@ class WallFollowerClass(Node):
             self.active = True
         else:
             self.active = False
+            self.vel_pub.publish(Twist())
         response.success = True
         # response.message = "Dink donk"
 

@@ -4,6 +4,7 @@ from geometry_msgs.msg import Point
 from nav_msgs.msg import Odometry
 import rclpy
 from rclpy.node import Node
+from rclpy.executors import MultiThreadedExecutor
 
 from sensor_msgs.msg import LaserScan
 from std_srvs.srv import SetBool
@@ -21,11 +22,13 @@ class Bug2_navigator(Node):
                 "Wall-follower service not available, waiting again..."
             )
         self.wallfollow_req = SetBool.Request()
+        self.sent_wf_msg = False
         while not self.gotopoint.wait_for_service(timeout_sec=1.0):
             self.get_logger().info(
                 "Go-to-point service not available, waiting again..."
             )
         self.gotopoint_req = Bug2Goto.Request()
+        self.sent_gtp_msg = False
 
         self.regions = {
             "fright": 0.0,
@@ -50,17 +53,17 @@ class Bug2_navigator(Node):
         )
         self.odom_sub = self.create_subscription(Odometry, "/odom", self.clbk_odom, 10)
 
-        timer_period = 0.1  # seconds
+        timer_period = 0.3  # seconds
         self.timer = self.create_timer(timer_period, self.timer_callback)
         self.sendto_gotopoint(True, self.target)
 
     def timer_callback(self):
+        if self.sent_wf_msg or self.sent_gtp_msg:
+            # for å motvirke nokken bugs (kan hende dette e fikset, beholder i tilfelle)
+            self.get_logger().info("Waiting for msg, skipping...")
+            return
         if self.mode == self.mode_dict["gotopoint"]:
-            if (
-                self.regions["front"] < 1.0
-                or self.regions["fright"] < 0.6
-                or self.regions["fleft"] < 0.6
-            ):
+            if self.regions["front"] < 1.0:
                 self.get_logger().info("Found a wall, entering wall follower mode")
                 self.wallfollow_switch_dst = getDistance(self.position, self.target)
                 self.change_mode(self.mode_dict["wallfollow"])
@@ -70,7 +73,7 @@ class Bug2_navigator(Node):
             self.get_logger().info(
                 f"distance from point: {dst} - delta from line: {delta}"
             )
-            if dst < self.wallfollow_switch_dst and delta < 1.0:
+            if dst < self.wallfollow_switch_dst - 0.1 and delta < 0.3:
                 self.get_logger().info("Refound the M-line, switching to go-to-point")
                 self.change_mode(self.mode_dict["gotopoint"])
         else:
@@ -79,13 +82,21 @@ class Bug2_navigator(Node):
     def change_mode(self, mode: int):
         if mode != self.mode:
             if mode == self.mode_dict["wallfollow"]:
+                if not self.sent_gtp_msg:
+                    self.sent_gtp_msg = True
+                    self.sendto_gotopoint(False, self.target)
+                if not self.sent_wf_msg:
+                    self.sent_wf_msg = True
+                    self.sendto_wallfollower(True)
                 self.mode = self.mode_dict["wallfollow"]
-                self.sendto_gotopoint(False, self.target)
-                self.sendto_wallfollower(True)
             elif mode == self.mode_dict["gotopoint"]:
+                if not self.sent_wf_msg:
+                    self.sent_wf_msg = True
+                    self.sendto_wallfollower(False)
+                if not self.sent_gtp_msg:
+                    self.sent_gtp_msg = True
+                    self.sendto_gotopoint(True, self.target)
                 self.mode = self.mode_dict["gotopoint"]
-                self.sendto_wallfollower(False)
-                self.sendto_gotopoint(True, self.target)
             # self.timer = self.create_timer(0.1, self.timer_callback)
         else:
             self.get_logger().warning(
@@ -122,9 +133,11 @@ class Bug2_navigator(Node):
         self.wallfollow_req.data = start_wallfollower
         # self.wallfollow.call(self.wallfollow_req)
         self.wallfollow_future = self.wallfollow.call_async(self.wallfollow_req)
-        rclpy.spin_until_future_complete(self, self.wallfollow_future, timeout_sec=10.0)
-        self.get_logger().info("exited sendto wallfollow")
-        return self.wallfollow_future.result()
+        # rclpy.spin_until_future_complete(self, self.wallfollow_future)
+        # # rclpy.spin_until_future_complete(self, self.wallfollow_future, timeout_sec=10.0)
+        # self.get_logger().info("Finished sendto wallfollow")
+        self.sent_wf_msg = False
+        # return self.wallfollow_future.result()
 
     def sendto_gotopoint(self, start_gotopoint: bool, target: Point):
         self.get_logger().info(
@@ -134,9 +147,11 @@ class Bug2_navigator(Node):
         self.gotopoint_req.target_position = target
         # self.gotopoint.call(self.gotopoint_req)
         self.gotopoint_future = self.gotopoint.call_async(self.gotopoint_req)
-        rclpy.spin_until_future_complete(self, self.gotopoint_future, timeout_sec=10.0)
-        self.get_logger().info("exited sendto gotopoint")
-        return self.gotopoint_future.result()
+        # rclpy.spin_until_future_complete(self, self.gotopoint_future)
+        # # rclpy.spin_until_future_complete(self, self.gotopoint_future, timeout_sec=10.0)
+        # self.get_logger().info("Finished sendto gotopoint")
+        self.sent_gtp_msg = False
+        # return self.gotopoint_future.result()
 
 
 def getDistance(start: Point, end: Point) -> float:
@@ -151,15 +166,17 @@ def deltaFromLine(start: Point, end: Point, current: Point) -> float:
 
 def main(args=None):
     rclpy.init(args=args)
-    controller = Bug2_navigator()
+    node = Bug2_navigator()
+    executor = MultiThreadedExecutor()
+    executor.add_node(node)
     try:
-        rclpy.spin(controller)
+        executor.spin()
         print("oh noes")
     except KeyboardInterrupt:
         print("Exiting program...")
     finally:
         sleep(1)
-        controller.destroy_node()
+        node.destroy_node()
         rclpy.shutdown()
 
 
