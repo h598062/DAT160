@@ -42,7 +42,7 @@ class GoToPointClass(Node):
     def service_callback(
         self, request: Bug2Goto.Request, response: Bug2Goto.Response
     ) -> Bug2Goto.Response:
-        print(f"Request: {request}")
+        self.get_logger().info(f"Request: {request}")
         if request.move_switch:
             self.active = True
             if request.target_position:
@@ -78,7 +78,7 @@ class GoToPointClass(Node):
         twist_msg.linear.x = 0.0
         twist_msg.angular.z = 0.0
         self.vel_pub.publish(twist_msg)
-        self.get_logger().info("go-to-point -> finished")
+        self.get_logger().warning("go-to-point -> finished")
 
     def fix_yaw(self, des_pos):
         desired_yaw = math.atan2(

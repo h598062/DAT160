@@ -48,7 +48,7 @@ class WallFollowerClass(Node):
         self, request: SetBool.Request, response: SetBool.Response
     ) -> SetBool.Response:
         # do something
-        print(f"request: {request}")
+        self.get_logger().info(f"request: {request}")
         if request.data:
             self.active = True
         else:
